@@ -1,7 +1,10 @@
 CREATE TABLE Log_Assinaturas (
   idLog_Assinaturas SERIAL,
-  log_id INTEGER NOT NULL,
-  data_criacao DATE NOT NULL,
+  Usuarios_idUsuarios INTEGER NOT NULL,
+  Documentos_idDocumentos INTEGER NOT NULL,
+  Solicitacoes_idSolicitacoes INTEGER NOT NULL,
+  data_assinatura TIMESTAMP,
+  localizacao  VARCHAR(45) NOT NULL,
   CONSTRAINT pk_Log_Assinaturas PRIMARY KEY(idLog_Assinaturas)
 );
 
@@ -10,6 +13,9 @@ CREATE TABLE Usuarios (
   nome VARCHAR(45) NOT NULL,
   cpf VARCHAR(20) NOT NULL,
   foto VARCHAR(45) NOT NULL,
+  email VARCHAR(45) NOT NULL,
+  username VARCHAR(45) NOT NULL,
+  password VARCHAR(45) NOT NULL,
   CONSTRAINT pk_Usuarios PRIMARY KEY(idUsuarios)
 );
 
@@ -63,35 +69,52 @@ CREATE USER nardoni WITH PASSWORD ‘nardoni123‘;
 CREATE USER funcionario WITH PASSWORD ‘abcde54321*‘;
 
 CREATE VIEW documentosAssinados AS
-    SELECT d.nome, u.nome, s.assinado, a.data_assinatura
-    FROM Documentos d, Usuarios u, Solicitacoes s, Assinaturas a
-    WHERE d.idDocumentos = s.Documentos_idDocumentos AND
-	        a.Documentos_idDocumentos = d.idDocumentos AND
-		      s.Documentos_idDocumentos = a.Documentos_idDocumentos AND
-		      s.Usuarios_idUsuarios = 1 AND
-		      s.id_Solicitado = a.Usuarios_idUsuarios AND
-		      s.assinado = 'true' AND
-		      a.Usuarios_idUsuarios = u.idUsuarios;
+    SELECT d.nome_documento, u.nome, s.assinado, a.data_assinatura, a.localizacao
+    FROM documentos d, usuarios u, solicitacoes s, assinaturas a
+    WHERE d.iddocumentos = s.documentos_iddocumentos AND
+          a.documentos_iddocumentos = d.iddocumentos AND
+          s.documentos_iddocumentos = a.documentos_iddocumentos AND
+          s.id_solicitado = a.usuarios_idusuarios AND
+          s.assinado = true AND
+          a.usuarios_idusuarios = u.idusuarios
+    ORDER BY a.data_assinatura DESC;
 
 CREATE VIEW solicitacoesPorUsuario AS
-    SELECT u.nome, d.nome, s.data_inicio, s.assinado
+    SELECT u.nome, d.nome_documento, s.data_inicio, s.assinado
     FROM Documentos d, Usuarios u, Solicitacoes s
-    WHERE s.id_Solicitado = 2 AND
+    WHERE s.Usuarios_idUsuarios = u.idUsuarios AND
           d.idDocumentos = s.Documentos_idDocumentos AND
           d.Usuarios_idUsuarios = u.idUsuarios;
 
 CREATE VIEW documentosInseridoPorUsuario AS
+    SELECT u.nome, d.nome_documento, d.tipo, d.documento
     FROM Usuarios u, Documentos d
     WHERE u.idUsuarios = d.Usuarios_idUsuarios AND
-          d.Usuarios_idUsuarios = 1;
+          d.Usuarios_idUsuarios = u.idUsuarios
+    ORDER BY u.nome;
 
-CREATE TRIGGER tr_deposicao
-AFTER UPDATE ON Estoque
-FOR EACH row
-SET quantidade = 10;
+CREATE FUNCTION log_insert()
+RETURNS void AS $$
+BEGIN
+    INSERT INTO log_assinaturas
+    SELECT *
+    FROM Assinaturas
+    WHERE data_assinatura = (
+      SELECT MAX(data_assinatura)
+      FROM Assinaturas);
+END
+$$ language 'plpgsql';
 
+CREATE FUNCTION horario()
+RETURNS trigger AS $$
+BEGIN
+    NEW.data_assinatura = now();
+    RETURN NEW;
+END
+$$ language 'plpgsql';
 
-Assinaturas FOREIGN KEY=
-  CONSTRAINT fk_Assinaturas_Usuarios FOREIGN KEY(Usuarios_idUsuarios) REFERENCES Usuarios(idUsuarios),
-  CONSTRAINT fk_Assinaturas_Documentos FOREIGN KEY(Documentos_idDocumentos) REFERENCES Documentos(idDocumentos),
-  CONSTRAINT fk_Assinaturas_Usuarios FOREIGN KEY(Solicitacoes_idSolicitacoes) REFERENCES Solicitacoes(idSolicitacoes),
+CREATE TRIGGER horario_assinatura
+BEFORE INSERT
+ON Assinaturas
+FOR EACH ROW
+EXECUTE PROCEDURE horario();
